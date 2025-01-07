@@ -1,0 +1,27 @@
+{
+  "ionos_token_file": "ionos_token.txt",
+  "llama_model": {
+    "directory": "/home/radwan/Desktop/startUp_stuff/llama",
+    "file": "Meta-Llama-3.1-8B-Instruct-Q6_K_L.gguf",
+    "n_gpu_layers": 40,
+    "n_threads": 12,
+    "use_mlock": true
+  },
+  "whisper_model": {
+    "name": "large",
+    "device": "cuda"
+  },
+  "piper": {
+    "url": "http://localhost:5000"
+  },
+  "audio": {
+    "format": "paInt16",
+    "channels": 1,
+    "rate": 16000,
+    "frame_duration_ms": 30,
+    "silence_threshold_sec": 1
+  },
+  "use_cloud": true,
+  "system_role": "Du bist ein hilfreicher Assistent",
+  "initial_message": "Hallo und Willkommen. Hier ist Jan. Was kann ich für Sie tun?"
+}
