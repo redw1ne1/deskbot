@@ -464,6 +464,7 @@ class Application:
 
         # Determine the role file based on the use_cloud flag
         role_file = 'prompt_ionos.txt' if self.use_cloud else 'prompt.txt'
+        print(role_file)
         try:
             with open(role_file, 'r') as file:
                 system_role_content = file.read()
@@ -491,8 +492,8 @@ class Application:
                                 conversation_history=self.conversation.history,
                                 system_role=self.conversation.system_role,
                                 use_cloud=self.use_cloud,
-                                ionos_token=self.llama.ionos_token,
-                                piper_url=self.config.get('piper', 'url')
+                                ionos_token=self.llama.ionos_token
+                                #piper_url=self.config.get('piper', 'url')
                             )
                             print(f'Jan: {llm_response}')
                             # Synthesize the generated response into speech
