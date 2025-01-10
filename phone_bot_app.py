@@ -170,6 +170,7 @@ class LlamaModel:
             body = {
                 "model": cloud_model_name,
                 "messages": conversation_history,
+                "temperature": 0.5
             }
             try:
                 # Send POST request to the cloud endpoint
