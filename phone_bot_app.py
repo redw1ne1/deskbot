@@ -10,8 +10,9 @@ import simpleaudio as sa
 import io
 import wave
 from llama_cpp import Llama
+from LLM_Model import LlamaModel, Config
 
-class Config:
+'''class Config:
     """
     Handles the loading and retrieval of configuration parameters from a JSON file.
     """
@@ -80,9 +81,9 @@ class TokenLoader:
                 return file.read().strip()
         except FileNotFoundError:
             print(f"Token file {token_file} not found.")
-            exit(1)
+            exit(1)'''
 
-class LlamaModel:
+'''class LlamaModel:
     """
     Handles loading and interacting with the Llama language model, supporting both local and cloud-based operations.
     """
@@ -196,7 +197,7 @@ class LlamaModel:
         # Append the assistant's response to the conversation history
         conversation_history.append({"role": "assistant", "content": response_content})
 
-        return response_content, conversation_history
+        return response_content, conversation_history'''
 
 class WhisperModel:
     """
@@ -386,7 +387,7 @@ class SpeechSynthesizer:
             print(f"Error during speech synthesis: {e}")
             return b""
 
-class ConversationManager:
+'''class ConversationManager:
     """
     Maintains and manages the conversation history between the user and the assistant.
     """
@@ -398,7 +399,7 @@ class ConversationManager:
             system_role (str): Description of the system's role in the conversation.
         """
         self.system_role = system_role
-        self.history = []
+        self.history = []'''
 
 class Application:
     """
@@ -412,7 +413,7 @@ class Application:
             config_path (str, optional): Path to the configuration JSON file. Defaults to 'config.json'.
         """
         self.config = Config(config_path)
-        self.token_loader = TokenLoader(self.config.get('ionos_token_file'))
+        '''self.token_loader = TokenLoader(self.config.get('ionos_token_file'))
         self.use_cloud = self.config.get('use_cloud', default=False)
         llama_conf = self.config.get('llama_model')
         self.llama = LlamaModel(
@@ -423,7 +424,7 @@ class Application:
             use_mlock=llama_conf['use_mlock'],
             use_cloud=self.use_cloud
         )
-        self.llama.ionos_token = self.token_loader.token if self.use_cloud else None
+        self.llama.ionos_token = self.token_loader.token if self.use_cloud else None'''
 
         whisper_conf = self.config.get('whisper_model')
         device = torch.device(whisper_conf['device'] if torch.cuda.is_available() else 'cpu')
@@ -437,11 +438,12 @@ class Application:
         self.audio_handler = AudioHandler(audio_conf)
         piper_conf = self.config.get('piper')
         self.synthesizer = SpeechSynthesizer(piper_conf['url'])
-        self.conversation = ConversationManager(self.config.get('system_role'))
+        #self.conversation = ConversationManager(self.config.get('system_role'))
         self.initial_message = self.config.get('initial_message')
         print(f'Jan: {self.initial_message}')
         self.silence_threshold = audio_conf['silence_threshold_sec']
         self.play_initial_message()
+        self.llm = LlamaModel()
 
     def play_initial_message(self):
         """
@@ -460,11 +462,12 @@ class Application:
         buffer = b""  # Buffer to accumulate audio data
         silence_start = None  # Timestamp when silence is detected
         is_processing = False  # Flag indicating whether the application is processing the buffered audio
+        conversation_history = None
 
         print("Listening and transcribing...")
 
         # Determine the role file based on the use_cloud flag
-        role_file = 'prompt_ionos.txt' if self.use_cloud else 'prompt.txt'
+        '''role_file = 'prompt_ionos.txt' if self.use_cloud else 'prompt.txt'
         print(role_file)
         try:
             with open(role_file, 'r') as file:
@@ -472,7 +475,7 @@ class Application:
             self.conversation.history = [{"role": "system", "content": system_role_content}]
         except FileNotFoundError:
             print(f"Role file {role_file} not found. Using default system role.")
-            self.conversation.history = [{"role": "system", "content": self.conversation.system_role}]
+            self.conversation.history = [{"role": "system", "content": self.conversation.system_role}]'''
 
         try:
             while True:
@@ -488,13 +491,9 @@ class Application:
                         if transcribed_text:
                             print(f'User: {transcribed_text}')
                             # Generate response using the Llama model (cloud or local)
-                            llm_response, self.conversation.history = self.llama.generate_response(
+                            llm_response, conversation_history = self.llm.generate_response(
                                 prompt=transcribed_text,
-                                conversation_history=self.conversation.history,
-                                system_role=self.conversation.system_role,
-                                use_cloud=self.use_cloud,
-                                ionos_token=self.llama.ionos_token
-                                #piper_url=self.config.get('piper', 'url')
+                                conversation_history=conversation_history
                             )
                             print(f'Jan: {llm_response}')
                             # Synthesize the generated response into speech

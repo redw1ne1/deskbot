@@ -1,12 +1,19 @@
 {
-  "ionos_token_file": "ionos_token.txt",
+  "llama_cloud_config": {
+    "ionos_token_file": "ionos_token.txt",
+    "cloud_model_name": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+    "endpoint": "https://openai.inference.de-txl.ionos.com/v1/chat/completions",
+    "role_file": "prompt_cloud.txt"
+  },
   "llama_model": {
     "directory": "/home/radwan/Desktop/startUp_stuff/llama",
     "file": "Meta-Llama-3.1-8B-Instruct-Q6_K_L.gguf",
     "n_gpu_layers": 40,
     "n_threads": 12,
-    "use_mlock": true
+    "use_mlock": true,
+    "role_file": "prompt.txt"
   },
+
   "whisper_model": {
     "name": "large",
     "device": "cuda"
@@ -23,5 +30,6 @@
   },
   "use_cloud": true,
   "system_role": "Du bist ein hilfreicher Assistent",
+
   "initial_message": "Hallo und Willkommen. Hier ist Jan. Was kann ich für Sie tun?"
 }
