@@ -109,21 +109,25 @@ class LlamaModel:
         self.use_cloud = self.config.get('use_cloud', default=False)
         self.conversation = ConversationManager(self.config.get('system_role'))
 
-        if not self.use_cloud:
-            llama_conf = self.config.get('llama_model')
-            self.model_dir = llama_conf['directory']
-            self.model_file = llama_conf['file']
-            self.model_path = f"{model_dir}/{model_file}"
-            self.n_gpu_layers = llama_conf['n_gpu_layers']
-            self.n_threads = llama_conf['n_threads']
-            self.use_mlock = llama_conf['use_mlock']
-            self.model = self.load_model()
-        else:
-            llama_conf = self.config.get('llama_cloud_config')
-            self.token_loader = TokenLoader(llama_conf['ionos_token_file'])
-            self.ionos_token = self.token_loader.token
-            self.model = llama_conf['cloud_model_name']
-            self.endpoint = llama_conf['endpoint']
+
+        llama_conf = self.config.get('llama_model')
+        model_dir = llama_conf['directory']
+        model_file = llama_conf['file']
+        self.model_path = f"{model_dir}/{model_file}"
+        self.n_gpu_layers = llama_conf['n_gpu_layers']
+        self.n_ctx = llama_conf['n_ctx']
+        self.n_threads = llama_conf['n_threads']
+        self.use_mlock = llama_conf['use_mlock']
+
+        # if not self.use_cloud:
+        self.model_local = self.load_model()
+
+        #else:
+        llama_conf = self.config.get('llama_cloud_config')
+        self.token_loader = TokenLoader(llama_conf['ionos_token_file'])
+        self.ionos_token = self.token_loader.token
+        self.model = llama_conf['cloud_model_name']
+        self.endpoint = llama_conf['endpoint']
 
         role_file = llama_conf['role_file']
         try:
@@ -151,8 +155,9 @@ class LlamaModel:
                 model_path=self.model_path,
                 device_map="balanced",
                 n_gpu_layers=self.n_gpu_layers,
-                n_threads=self.n_threads,
-                use_mlock=self.use_mlock
+                n_ctx=self.n_ctx,
+                #n_threads=self.n_threads,
+                #use_mlock=self.use_mlock
             )
             print("Llama model loaded.")
             return llm
@@ -183,6 +188,26 @@ class LlamaModel:
 
         # Append the user's input to the conversation history
         conversation_history.append({"role": "user", "content": prompt})
+
+        #####################################################################################
+
+        #                 Blocker to for LLM function calling
+
+        #function_to_call = self.function_calling(prompt)
+        function_to_call = self.function_calling_local(prompt)
+        if isinstance(function_to_call, str):
+            function_to_call = json.loads(function_to_call)
+        print(self.execute_function_call(function_to_call))
+        """if isinstance(function_to_call, str):
+            function_to_call = json.loads(function_to_call)
+        #function_call = function_to_call
+        function_name = function_to_call.get("name")"""
+
+
+        #result = self.execute_function_call(function_to_call)
+
+
+        #####################################################################################
 
         if self.use_cloud:
             # Configuration for cloud-based LLM
@@ -221,3 +246,137 @@ class LlamaModel:
         conversation_history.append({"role": "assistant", "content": response_content})
 
         return response_content, conversation_history
+
+
+    def function_calling_local(self, prompt):
+
+
+        messages = [
+            {"role": "system", "content": "du schlägst die passende Funktion vor."},
+            {"role": "user", "content": prompt}
+        ]
+
+
+
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_info",
+                    "description": "Sie geben informationen über Addresse und Telefonnummer. Sie entscheiden auf der "
+                                   "Grundlage des Inputs, was Sie anbieten möchten. Du rufst diese Funktion nicht auf, "
+                                   "wenn die Anfrage irrelevant ist.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "address": {
+                                "type": "boolean",
+                                "description": "ob die Addresse gefordert wird"
+                            },
+                            "phone_number": {
+                                "type": "boolean",
+                                "description": "ob die Telefonnummer gefordert wird"
+                            }
+                        },
+                        "required": ["address", "phone_number"]
+                    },
+                    "strict": True
+                }
+            }
+        ]
+
+        response = self.model_local.create_chat_completion(
+            messages=messages,
+            tools=tools
+        )
+
+        response_content = response['choices'][0]['message']['content']
+
+        return response_content
+
+
+    def execute_function_call(self, response_content):
+        function_registry = {
+            "get_info": self.get_info,
+        }
+        try:
+            # Directly access the `function_call` key from response_content
+
+            # function_call = function_to_call
+            function_name = response_content.get("name")
+
+            # Extract the name and parameters
+            #function_name = function_call.get("name")
+            parameters = response_content.get("parameters", {})
+
+            # Call the corresponding function
+            if function_name in function_registry:
+                function_to_call = function_registry[function_name]
+                result = function_to_call(**parameters)  # Unpack parameters as arguments
+                return result
+            else:
+                raise ValueError(f"Function '{function_name}' is not registered.")
+        except Exception as e:
+            return {"error": str(e)}
+
+
+    def function_calling(self, prompt):
+
+        tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_info",
+                        "description": "Sie geben informationen über Addresse und Telefonnummer",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "address": {
+                                    "type": "boolean",
+                                    "description": "ob die Addresse gefordert wird"
+                                },
+                                "phone_number": {
+                                    "type": "boolean",
+                                    "description": "ob die Telefonnummer gefordert wird"
+                                }
+                            },
+                            "required": ["address", "phone_number"]
+                        },
+                    }
+                }
+            ]
+
+        api_json = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "du schlägst die passende Funktion vor."},
+                {"role": "user", "content": prompt}
+                ],
+            "tools": tools,
+            "tool_choice": "required"
+        }
+
+
+        headers = {
+            "Authorization": f"Bearer {self.ionos_token}",
+            "Content-Type": "application/json"
+        }
+        """body = {
+            "model": self.model,
+            "messages": tools
+        }"""
+        # Send POST request to the cloud endpoint
+        response = requests.post(self.endpoint, json=api_json, headers=headers).json()
+        response_content = response['choices'][0]['message']['content']
+        print("response: ", response)
+        return response_content
+
+    def get_info(self, address=False, phone_number=False):
+        clinic_address = "blabla 13, Frankfurt"
+        clinic_number = "111 222 333"
+        info_to_return =[]
+        if address:
+            info_to_return.append(clinic_address)
+        if phone_number:
+            info_to_return.append(clinic_number)
+        return info_to_return
