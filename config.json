@@ -31,7 +31,7 @@
     "frame_duration_ms": 30,
     "silence_threshold_sec": 1
   },
-  "use_cloud": true,
+  "use_cloud": false,
   "system_role": "Du bist ein hilfreicher Assistent",
 
   "initial_message": "Hallo und Willkommen. Hier ist Jan. Was kann ich für Sie tun?"

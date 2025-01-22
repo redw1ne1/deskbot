@@ -165,6 +165,7 @@ class AudioHandler:
         except Exception as e:
             print(f"Error playing response audio: {e}")
 
+
 class SpeechSynthesizer:
     """
     Manages the synthesis of speech from text using an external TTS server.

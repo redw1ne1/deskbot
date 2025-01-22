@@ -153,7 +153,6 @@ class LlamaModel:
         try:
             llm = Llama(
                 model_path=self.model_path,
-                device_map="balanced",
                 n_gpu_layers=self.n_gpu_layers,
                 n_ctx=self.n_ctx,
                 #n_threads=self.n_threads,
@@ -189,21 +188,31 @@ class LlamaModel:
         # Append the user's input to the conversation history
         conversation_history.append({"role": "user", "content": prompt})
 
+        agents = Agents(prompt, self.model_local, conversation_history)
+        identify_purpose = agents.identify_purpose()
+        print(identify_purpose)
+
+        # The small talk branch - keep looping in small talk until the patient wants something else
+        if identify_purpose == "small_talk":
+            response_content, response_message = getattr(agents, identify_purpose)()
+            print(response_content)
+            conversation_history.append(response_message)
+            return response_content, conversation_history
+
+
+
         #####################################################################################
 
         #                 Blocker to for LLM function calling
 
         #function_to_call = self.function_calling(prompt)
-        function_to_call = self.function_calling_local(prompt)
+        """function_to_call = self.function_calling_local(prompt)
         if isinstance(function_to_call, str):
             function_to_call = json.loads(function_to_call)
-        print(self.execute_function_call(function_to_call))
-        """if isinstance(function_to_call, str):
-            function_to_call = json.loads(function_to_call)
-        #function_call = function_to_call
-        function_name = function_to_call.get("name")"""
-
-
+        function_result = self.execute_function_call(function_to_call)
+        print(function_result)
+        conversation_history.append({"role": "tool", "content": function_result})
+        print(conversation_history)"""
         #result = self.execute_function_call(function_to_call)
 
 
@@ -232,7 +241,7 @@ class LlamaModel:
         else:
             try:
                 # Generate response using the local Llama model
-                response = self.model.create_chat_completion(
+                response = self.model_local.create_chat_completion(
                     messages=conversation_history,
                     max_tokens=100
                 )
@@ -252,33 +261,54 @@ class LlamaModel:
 
 
         messages = [
-            {"role": "system", "content": "du schlägst die passende Funktion vor."},
+            {"role": "system", "content": "du schlägst die passende Funktion vor. Wenn der erforderliche "
+                                          "Eingabeparameter nicht angegeben ist, fordern Sie den Benutzer auf, ihn anzugeben. "
+                                          "Auf keinen Fall machen Sie Annahmen."},
             {"role": "user", "content": prompt}
         ]
-
-
 
         tools = [
             {
                 "type": "function",
                 "function": {
-                    "name": "get_info",
-                    "description": "Sie geben informationen über Addresse und Telefonnummer. Sie entscheiden auf der "
-                                   "Grundlage des Inputs, was Sie anbieten möchten. Du rufst diese Funktion nicht auf, "
-                                   "wenn die Anfrage irrelevant ist.",
+                    "name": "get_address",
+                    "description": "Ruft die Adresse ab. Diese Funktion wird nur verwendet, wenn explizit nach einer Adresse gefragt wird.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "strict": True
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_phonenumber",
+                    "description": "Ruft die Telefonnummer ab. Diese Funktion wird nur verwendet, wenn explizit nach einer Telefonnummer gefragt wird.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "strict": True
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_doctors",
+                    "description": "Liefert Informationen über Ärzte basierend auf ihrer Spezialisierung. "
+                                   "Diese Funktion wird nur verwendet, wenn eine Spezialisierung angegeben ist.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "address": {
-                                "type": "boolean",
-                                "description": "ob die Addresse gefordert wird"
-                            },
-                            "phone_number": {
-                                "type": "boolean",
-                                "description": "ob die Telefonnummer gefordert wird"
+                            "specialization": {
+                                "type": "string",
+                                "description": "Die Spezialisierung des Arztes, nach der gesucht wird."
                             }
                         },
-                        "required": ["address", "phone_number"]
+                        "required": ["specialization"]
                     },
                     "strict": True
                 }
@@ -291,22 +321,18 @@ class LlamaModel:
         )
 
         response_content = response['choices'][0]['message']['content']
-
+        print(response_content)
         return response_content
 
 
     def execute_function_call(self, response_content):
         function_registry = {
-            "get_info": self.get_info,
+            "get_address": self.get_address,
+            "get_phonenumber": self.get_phonenumber,
+            "get_doctors": self.get_doctors,
         }
         try:
-            # Directly access the `function_call` key from response_content
-
-            # function_call = function_to_call
             function_name = response_content.get("name")
-
-            # Extract the name and parameters
-            #function_name = function_call.get("name")
             parameters = response_content.get("parameters", {})
 
             # Call the corresponding function
@@ -318,6 +344,19 @@ class LlamaModel:
                 raise ValueError(f"Function '{function_name}' is not registered.")
         except Exception as e:
             return {"error": str(e)}
+
+
+    def get_address(self):
+        clinic_address = "blabla 13, Frankfurt"
+        return clinic_address
+
+    def get_phonenumber(self):
+        clinic_number = "111 222 333"
+        return clinic_number
+
+    def get_doctors(self, specialization):
+        doctors = ['Andreas Bauer', 'Andrea Bauerin', 'Andres Bilder']
+        return doctors
 
 
     def function_calling(self, prompt):
@@ -371,12 +410,102 @@ class LlamaModel:
         print("response: ", response)
         return response_content
 
-    def get_info(self, address=False, phone_number=False):
-        clinic_address = "blabla 13, Frankfurt"
-        clinic_number = "111 222 333"
-        info_to_return =[]
-        if address:
-            info_to_return.append(clinic_address)
-        if phone_number:
-            info_to_return.append(clinic_number)
-        return info_to_return
+class Agents:
+
+    def __init__(self, prompt, model, conversation_history):
+        """
+        Description here.
+
+        Args:
+            None.
+        """
+        self.prompt = prompt
+        self.model = model
+        self.conversation_history = conversation_history
+
+
+    def identify_purpose(self):
+
+        system_role_definition = """Sie haben nur eine einzige Aufgabe: den Zweck der Anfrage zu ermitteln. 
+        Wenn die Anfrage ausdrücklich nach der Adresse, der Telefonnummer oder den Ärzten der Praxis fragt, 
+        schlagen Sie vor, mit get_info zu antworten. Wenn die Anfrage explizit nach Terminen, Symptomen, 
+        Rezepten oder Krankmeldungen fragt, antworten Sie mit interactive. Wenn keine der vorherigen Anfragen explizit 
+        erwähnt wird, nur dann schlagen Sie die Antwort small_talk vor."""
+
+        messages = [
+            {"role": "system", "content": system_role_definition},
+            {"role": "user", "content": self.prompt}
+        ]
+
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_info",
+                    "description": "nur, wenn sie nach Praxisadresse, Telefonnummer oder Ärzten gefragt werden",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "strict": True
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "interactive",
+                    "description": "Wenn die Anfrage explizit nach Terminen, Symptomen, Rezepten oder Krankmeldungen fragt",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "strict": True
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "small_talk",
+                    "description": "wenn keine eindeutigen Angaben zu Praxisadresse, Telefonnummer, Ärzten, Terminen, "
+                                   "Symptomen, Rezepten oder Krankmeldungen gemacht werden.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "strict": True
+                }
+            }
+        ]
+
+        response = self.model.create_chat_completion(
+            messages=messages,
+            tools=tools,
+            tool_choice="required"
+        )
+        response_content = response['choices'][0]['message']['content']
+        response_content = json.loads(response_content)
+        return response_content.get("name")
+
+    def small_talk(self):
+
+        system_role_definition = """Sie haben eine Aufgabe und nur eine Aufgabe: das Gespräch in einer respektvollen Art 
+        (in Sie-Form) und Weise weiterzuführen. Wenn Sie den Namen des Anrufers kennen, sollten Sie ihn häufig verwenden. 
+        Halten Sie Ihre Antwort kurz und fragen Sie, wie Sie dem Anrufer helfen können."""
+
+        messages = [
+            {"role": "system", "content": system_role_definition},
+            {"role": "user", "content": self.prompt}
+        ]
+
+        response = self.model.create_chat_completion(
+            messages=messages)
+
+        response_message = response['choices'][0]['message']
+        response_content = response_message['content']
+        return response_content, response_message
+
+    def get_info(self):
+
