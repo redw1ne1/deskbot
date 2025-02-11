@@ -194,18 +194,24 @@ class LlamaModel:
 
         # Append the user's input to the conversation history
         conversation_history.append({"role": "user", "content": prompt})
-
-        agents = Agents(prompt, self.model_local, conversation_history)
-        identify_purpose = agents.identify_purpose()
-        print(identify_purpose)
+        agents = Agents(prompt, self.model_local, conversation_history, self.config)
+        identified_purpose = agents.identify_purpose()
+        print(identified_purpose)
 
         # The small talk branch - keep looping in small talk until the patient wants something else
-        if identify_purpose == "small_talk":
-            response_content, response_message = getattr(agents, identify_purpose)()
+        if identified_purpose == "small_talk":
+            response_content, response_message = getattr(agents, identified_purpose)()
             print(response_content)
+            print(response_message)
             conversation_history.append(response_message)
             return response_content, conversation_history
-
+        elif identified_purpose == "get_info":
+            function_name = getattr(agents, identified_purpose)()
+            function_to_call = getattr(self, function_name)
+            result = function_to_call()
+            print(result)
+            conversation_history.append(result)
+            return result, conversation_history
 
 
         #####################################################################################
@@ -264,7 +270,7 @@ class LlamaModel:
         return response_content, conversation_history
 
 
-    def function_calling_local(self, prompt):
+    '''def function_calling_local(self, prompt):
         """
         Generate a response for the given user prompt using a locally defined model.
 
@@ -292,7 +298,7 @@ class LlamaModel:
 
         response_content = response['choices'][0]['message']['content']
         print(response_content)
-        return response_content
+        return response_content'''
 
     def execute_function_call(self, response_content):
         function_registry = {
@@ -322,7 +328,7 @@ class LlamaModel:
         clinic_number = "111 222 333"
         return clinic_number
 
-    def get_doctors(self, specialization):
+    def get_doctors(self):
         doctors = ['Andreas Bauer', 'Andrea Bauerin', 'Andres Bilder']
         return doctors
 
@@ -379,99 +385,94 @@ class LlamaModel:
 
 class Agents:
 
-    def __init__(self, prompt, model, conversation_history):
+    def __init__(self, prompt, model, conversation_history, config):
         """
-        Description here.
+        Initializes the Agents class for LLM interactions.
 
         Args:
-            None.
+            prompt (str): The user input.
+            model (object): The LLM model instance.
+            conversation_history (list): The history of the conversation.
+            config (Config): Configuration object for accessing tools and system roles.
         """
         self.prompt = prompt
         self.model = model
         self.conversation_history = conversation_history
+        self.config = config
 
-    def identify_purpose(self):
+    def call_llm(self, function_name):
+        """
+        Generalized LLM calling function for different purposes.
 
-        system_role_definition = """Sie haben nur eine einzige Aufgabe: den Zweck der Anfrage zu ermitteln. 
-        Wenn die Anfrage ausdrücklich nach der Adresse, der Telefonnummer oder den Ärzten der Praxis fragt, 
-        schlagen Sie vor, mit get_info zu antworten. Wenn die Anfrage explizit nach Terminen, Symptomen, 
-        Rezepten oder Krankmeldungen fragt, antworten Sie mit interactive. Wenn keine der vorherigen Anfragen explizit 
-        erwähnt wird, nur dann schlagen Sie die Antwort small_talk vor."""
+        Args:
+            function_name (str): The name of the function or behavior to invoke (e.g., 'identify_purpose').
 
+        Returns:
+            dict: The response from the LLM.
+        """
+        # Fetch function-specific tools and system role from config
+        func_config = self.config.get(function_name)
         messages = [
-            {"role": "system", "content": system_role_definition},
+            {"role": "system", "content": func_config["system_role"]},
             {"role": "user", "content": self.prompt}
         ]
+        tools = func_config.get("tools", [])
+        tool_choice = func_config.get("tool_choice", None)
+        print(messages)
+        try:
+            if not tools:
+                response = self.model.create_chat_completion(
+                    messages=messages
+                )
+            else:
+                response = self.model.create_chat_completion(
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice
+                )
+            return response
+        except Exception as e:
+            print(f"Error during LLM call for {function_name}: {e}")
+            return {"error": str(e)}
 
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_info",
-                    "description": "nur, wenn sie nach Praxisadresse, Telefonnummer oder Ärzten gefragt werden",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    },
-                    "strict": True
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "interactive",
-                    "description": "Wenn die Anfrage explizit nach Terminen, Symptomen, Rezepten oder Krankmeldungen fragt",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    },
-                    "strict": True
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "small_talk",
-                    "description": "wenn keine eindeutigen Angaben zu Praxisadresse, Telefonnummer, Ärzten, Terminen, "
-                                   "Symptomen, Rezepten oder Krankmeldungen gemacht werden.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    },
-                    "strict": True
-                }
-            }
-        ]
+    def get_info(self): # rename to get_info
+        """
+        Generate a response for the given user prompt using a locally defined model.
 
-        response = self.model.create_chat_completion(
-            messages=messages,
-            tools=tools,
-            tool_choice="required"
-        )
-        response_content = response['choices'][0]['message']['content']
-        response_content = json.loads(response_content)
+        This function creates a set of messages consisting of the system role and the
+        user's prompt, and sends them to a locally configured model to generate a
+        completion. The resulting response content is printed and returned to the
+        caller. This function is specific to models configured through `model_local`.
+
+        Parameters:
+            prompt (str): The user input to be processed and responded to.
+
+        Returns:
+            str: The generated response content based on the provided prompt.
+        """
+        response = self.call_llm("get_info")
+        response_content = json.loads(response['choices'][0]['message']['content'])
+        print(response_content)
+        return response_content.get("name")
+
+    def identify_purpose(self):
+        """
+        Determines the purpose of the user's request.
+
+        Returns:
+            str: The name of the determined purpose ('get_info', 'interactive', or 'small_talk').
+        """
+        response = self.call_llm("identify_purpose")
+        response_content = json.loads(response['choices'][0]['message']['content'])
         return response_content.get("name")
 
     def small_talk(self):
 
-        system_role_definition = """Sie haben eine Aufgabe und nur eine Aufgabe: das Gespräch in einer respektvollen Art 
-        (in Sie-Form) und Weise weiterzuführen. Wenn Sie den Namen des Anrufers kennen, sollten Sie ihn häufig verwenden. 
-        Halten Sie Ihre Antwort kurz und fragen Sie, wie Sie dem Anrufer helfen können."""
-
-        messages = [
-            {"role": "system", "content": system_role_definition},
-            {"role": "user", "content": self.prompt}
-        ]
-
-        response = self.model.create_chat_completion(
-            messages=messages)
-
+        response = self.call_llm("small_talk")
         response_message = response['choices'][0]['message']
         response_content = response_message['content']
         return response_content, response_message
+
 
     #def get_info(self):
 

@@ -258,6 +258,7 @@ class Application:
         self.silence_threshold = audio_conf['silence_threshold_sec']
         self.play_initial_message()
         self.llm = LlamaModel()
+        self.conversation_history = []
 
     def play_initial_message(self):
         """
@@ -276,7 +277,6 @@ class Application:
         buffer = b""  # Buffer to accumulate audio data
         silence_start = None  # Timestamp when silence is detected
         is_processing = False  # Flag indicating whether the application is processing the buffered audio
-        conversation_history = None
 
         print("Listening and transcribing...")
 
@@ -299,15 +299,14 @@ class Application:
 
                     # Perform processing tasks on the accumulated audio buffer
                     if buffer:
-                        # Optionally, play the recorded buffer
-                        # self.audio_handler.play_audio(buffer)
+                        # Transcribe the text using Whisper
                         transcribed_text = self.whisper.transcribe(buffer, self.audio_handler.rate)
                         if transcribed_text:
                             print(f'User: {transcribed_text}')
-                            # Generate response using the Llama model (cloud or local)
-                            llm_response, conversation_history = self.llm.generate_response(
+                            # Generate response using the Llama model and update conversation history
+                            llm_response, self.conversation_history = self.llm.generate_response(
                                 prompt=transcribed_text,
-                                conversation_history=conversation_history
+                                conversation_history=self.conversation_history
                             )
                             print(f'Jan: {llm_response}')
                             # Synthesize the generated response into speech
