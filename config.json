@@ -32,6 +32,36 @@
     "silence_threshold_sec": 1
   },
   "use_cloud": false,
+
+  "tools": [
+    {
+      "name": "get_address",
+      "description": "Ruft die Adresse ab. Diese Funktion wird nur verwendet, wenn explizit nach einer Adresse gefragt wird.",
+      "parameters": {}
+    },
+    {
+      "name": "get_phonenumber",
+      "description": "Ruft die Telefonnummer ab. Diese Funktion wird nur verwendet, wenn explizit nach einer Telefonnummer gefragt wird.",
+      "parameters": {}
+    },
+    {
+      "name": "get_doctors",
+      "description": "Liefert Informationen über Ärzte basierend auf ihrer Spezialisierung. "
+                     "Diese Funktion wird nur verwendet, wenn eine Spezialisierung angegeben ist.",
+      "parameters": {
+        "specialization": {
+          "type": "string",
+          "description": "Die Spezialisierung des Arztes, nach der gesucht wird."
+        }
+      }
+    }
+  ],
+  "messages": {
+    "system_role": "du schlägst die passende Funktion vor. Wenn der erforderliche Eingabeparameter nicht angegeben ist, fordern Sie den Benutzer auf, ihn anzugeben. Auf keinen Fall machen Sie Annahmen.",
+    "identify_purpose_role": "Sie haben nur eine einzige Aufgabe: den Zweck der Anfrage zu ermitteln. Wenn die Anfrage ausdrücklich nach der Adresse, der Telefonnummer oder den Ärzten der Praxis fragt, schlagen Sie vor, mit get_info zu antworten. Wenn die Anfrage explizit nach Terminen, Symptomen, Rezepten oder Krankmeldungen fragt, antworten Sie mit interactive. Wenn keine der vorherigen Anfragen explizit erwähnt wird, nur dann schlagen Sie die Antwort small_talk vor.",
+    "small_talk_role": "Sie haben eine Aufgabe und nur eine Aufgabe: das Gespräch in einer respektvollen Art (in Sie-Form) und Weise weiterzuführen. Wenn Sie den Namen des Anrufers kennen, sollten Sie ihn häufig verwenden. Halten Sie Ihre Antwort kurz und fragen Sie, wie Sie dem Anrufer helfen können."
+  },
+
   "system_role": "Du bist ein hilfreicher Assistent",
 
   "initial_message": "Hallo und Willkommen. Hier ist Jan. Was kann ich für Sie tun?"

@@ -107,6 +107,13 @@ class LlamaModel:
         self.config = Config()
         self.ionos_token = None  # Will be set later if needed
         self.use_cloud = self.config.get('use_cloud', default=False)
+
+        # Load tools and messages from config.json
+        self.tools = self.config.get('tools', default=[])
+        self.system_role = self.config.get('messages', 'system_role', default="")
+        self.identify_purpose_role = self.config.get('messages', 'identify_purpose_role', default="")
+        self.small_talk_role = self.config.get('messages', 'small_talk_role', default="")
+
         self.conversation = ConversationManager(self.config.get('system_role'))
 
 
@@ -258,72 +265,34 @@ class LlamaModel:
 
 
     def function_calling_local(self, prompt):
+        """
+        Generate a response for the given user prompt using a locally defined model.
 
+        This function creates a set of messages consisting of the system role and the
+        user's prompt, and sends them to a locally configured model to generate a
+        completion. The resulting response content is printed and returned to the
+        caller. This function is specific to models configured through `model_local`.
 
+        Parameters:
+            prompt (str): The user input to be processed and responded to.
+
+        Returns:
+            str: The generated response content based on the provided prompt.
+        """
         messages = [
-            {"role": "system", "content": "du schlägst die passende Funktion vor. Wenn der erforderliche "
-                                          "Eingabeparameter nicht angegeben ist, fordern Sie den Benutzer auf, ihn anzugeben. "
-                                          "Auf keinen Fall machen Sie Annahmen."},
+            {"role": "system", "content": self.system_role},
             {"role": "user", "content": prompt}
         ]
 
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_address",
-                    "description": "Ruft die Adresse ab. Diese Funktion wird nur verwendet, wenn explizit nach einer Adresse gefragt wird.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    },
-                    "strict": True
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_phonenumber",
-                    "description": "Ruft die Telefonnummer ab. Diese Funktion wird nur verwendet, wenn explizit nach einer Telefonnummer gefragt wird.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    },
-                    "strict": True
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_doctors",
-                    "description": "Liefert Informationen über Ärzte basierend auf ihrer Spezialisierung. "
-                                   "Diese Funktion wird nur verwendet, wenn eine Spezialisierung angegeben ist.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "specialization": {
-                                "type": "string",
-                                "description": "Die Spezialisierung des Arztes, nach der gesucht wird."
-                            }
-                        },
-                        "required": ["specialization"]
-                    },
-                    "strict": True
-                }
-            }
-        ]
 
         response = self.model_local.create_chat_completion(
             messages=messages,
-            tools=tools
+            tools=self.tools
         )
 
         response_content = response['choices'][0]['message']['content']
         print(response_content)
         return response_content
-
 
     def execute_function_call(self, response_content):
         function_registry = {
@@ -345,7 +314,6 @@ class LlamaModel:
         except Exception as e:
             return {"error": str(e)}
 
-
     def get_address(self):
         clinic_address = "blabla 13, Frankfurt"
         return clinic_address
@@ -357,7 +325,6 @@ class LlamaModel:
     def get_doctors(self, specialization):
         doctors = ['Andreas Bauer', 'Andrea Bauerin', 'Andres Bilder']
         return doctors
-
 
     def function_calling(self, prompt):
 
@@ -422,7 +389,6 @@ class Agents:
         self.prompt = prompt
         self.model = model
         self.conversation_history = conversation_history
-
 
     def identify_purpose(self):
 
@@ -507,5 +473,5 @@ class Agents:
         response_content = response_message['content']
         return response_content, response_message
 
-    def get_info(self):
+    #def get_info(self):
 
