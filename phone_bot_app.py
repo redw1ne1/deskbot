@@ -270,7 +270,7 @@ class Application:
         else:
             print("Failed to synthesize initial message.")
 
-    def run(self):
+    '''def run(self):
         """
         Starts the main application loop, handling audio input, transcription, response generation, and audio output.
         """
@@ -279,17 +279,6 @@ class Application:
         is_processing = False  # Flag indicating whether the application is processing the buffered audio
 
         print("Listening and transcribing...")
-
-        # Determine the role file based on the use_cloud flag
-        '''role_file = 'prompt_ionos.txt' if self.use_cloud else 'prompt.txt'
-        print(role_file)
-        try:
-            with open(role_file, 'r') as file:
-                system_role_content = file.read()
-            self.conversation.history = [{"role": "system", "content": system_role_content}]
-        except FileNotFoundError:
-            print(f"Role file {role_file} not found. Using default system role.")
-            self.conversation.history = [{"role": "system", "content": self.conversation.system_role}]'''
 
         try:
             while True:
@@ -346,6 +335,55 @@ class Application:
 
         except KeyboardInterrupt:
             # Gracefully handle termination via keyboard interrupt
+            print("Stopping...")
+            self.audio_handler.stop()'''
+
+    def listen_and_transcribe(self):
+        buffer = b""
+        silence_start = None
+        is_processing = False
+
+        while True:
+            if is_processing:
+                return buffer
+            audio_chunk = self.audio_handler.read_chunk()
+            if not audio_chunk:
+                continue
+            is_speech = self.vad.is_speech(audio_chunk, self.audio_handler.rate)
+            if is_speech:
+                buffer += audio_chunk
+                silence_start = None
+            else:
+                if silence_start is None:
+                    silence_start = time.time()
+                elif time.time() - silence_start > self.silence_threshold:
+                    is_processing = True
+
+    def process_audio_buffer(self, buffer, response_gen=None):
+        # Need to set a condition to add the LLM with the appointments as response_gen
+        # Appointments llm should be fully configured from LLM_Model
+        response_gen = response_gen or self.llm.generate_response
+        self.audio_handler.stream.stop_stream()
+        if buffer:
+            transcribed_text = self.whisper.transcribe(buffer, self.audio_handler.rate)
+            if transcribed_text:
+                llm_response, self.conversation_history = response_gen(transcribed_text, self.conversation_history)
+                audio_data = self.synthesizer.synthesize(llm_response)
+                if audio_data:
+                    self.audio_handler.play_wave_bytes(audio_data)
+                else:
+                    print("Failed to synthesize response audio.")
+            else:
+                print("No text transcribed, skipping.")
+        self.audio_handler.stream.start_stream()
+
+    def run(self):
+        print("Listening and transcribing...")
+        try:
+            while True:
+                buffer = self.listen_and_transcribe()
+                self.process_audio_buffer(buffer)
+        except KeyboardInterrupt:
             print("Stopping...")
             self.audio_handler.stop()
 

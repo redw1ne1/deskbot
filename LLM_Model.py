@@ -201,17 +201,18 @@ class LlamaModel:
         # The small talk branch - keep looping in small talk until the patient wants something else
         if identified_purpose == "small_talk":
             response_content, response_message = getattr(agents, identified_purpose)()
-            print(response_content)
-            print(response_message)
             conversation_history.append(response_message)
             return response_content, conversation_history
         elif identified_purpose == "get_info":
             function_name = getattr(agents, identified_purpose)()
             function_to_call = getattr(self, function_name)
-            result = function_to_call()
-            print(result)
-            conversation_history.append(result)
-            return result, conversation_history
+            requested_info = function_to_call()
+            print(requested_info)
+            agents = Agents(requested_info, self.model_local, conversation_history, self.config)
+            response_content, response_message = agents.formulate_answer()
+            print(response_content)
+            conversation_history.append(response_message)
+            return response_content, conversation_history
 
 
         #####################################################################################
@@ -400,7 +401,7 @@ class Agents:
         self.conversation_history = conversation_history
         self.config = config
 
-    def call_llm(self, function_name):
+    def call_llm(self, function_name, use_history=False):
         """
         Generalized LLM calling function for different purposes.
 
@@ -413,9 +414,12 @@ class Agents:
         # Fetch function-specific tools and system role from config
         func_config = self.config.get(function_name)
         messages = [
-            {"role": "system", "content": func_config["system_role"]},
-            {"role": "user", "content": self.prompt}
+            {"role": "system", "content": func_config["system_role"]}
         ]
+        messages = messages + self.conversation_history if use_history else messages
+        latest_prompt = {"role": "user", "content": self.prompt}
+        messages.append(latest_prompt)
+
         tools = func_config.get("tools", [])
         tool_choice = func_config.get("tool_choice", None)
         print(messages)
@@ -467,12 +471,15 @@ class Agents:
         return response_content.get("name")
 
     def small_talk(self):
-
         response = self.call_llm("small_talk")
         response_message = response['choices'][0]['message']
         response_content = response_message['content']
         return response_content, response_message
 
-
-    #def get_info(self):
+    def formulate_answer(self):
+        response = self.call_llm("formulate_answer", use_history=True)
+        print(response)
+        response_message = response['choices'][0]['message']
+        response_content = response_message['content']
+        return response_content, response_message
 
