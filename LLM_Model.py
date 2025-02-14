@@ -2,6 +2,11 @@ from llama_cpp import Llama
 import requests
 import json
 
+from uaclient.api.u.pro.packages.summary.v1 import summary
+
+from OpenVoice.tts_test import response
+
+
 class ConversationManager:
     """
     Maintains and manages the conversation history between the user and the assistant.
@@ -171,7 +176,7 @@ class LlamaModel:
             print(f"Failed to load Llama model: {e}")
             exit(1)
 
-    def generate_response(self, prompt, conversation_history):
+    def generate_response(self, prompt, conversation_history, sequence_level):
         """
         Generates a response from the Llama model based on the provided prompt and conversation history.
 
@@ -199,20 +204,45 @@ class LlamaModel:
         print(identified_purpose)
 
         # The small talk branch - keep looping in small talk until the patient wants something else
-        if identified_purpose == "small_talk":
-            response_content, response_message = getattr(agents, identified_purpose)()
-            conversation_history.append(response_message)
-            return response_content, conversation_history
-        elif identified_purpose == "get_info":
-            function_name = getattr(agents, identified_purpose)()
-            function_to_call = getattr(self, function_name)
-            requested_info = function_to_call()
-            print(requested_info)
-            agents = Agents(requested_info, self.model_local, conversation_history, self.config)
-            response_content, response_message = agents.formulate_answer()
-            print(response_content)
-            conversation_history.append(response_message)
-            return response_content, conversation_history
+        if sequence_level == "main":
+            if identified_purpose == "small_talk":
+                response_content, response_message = getattr(agents, identified_purpose)()
+                conversation_history.append(response_message)
+                return response_content, conversation_history, sequence_level
+            elif identified_purpose == "get_info":
+                function_name = getattr(agents, identified_purpose)()
+                function_to_call = getattr(self, function_name)
+                requested_info = function_to_call()
+                print(requested_info)
+                agents = Agents(requested_info, self.model_local, conversation_history, self.config)
+                response_content, response_message = agents.formulate_answer()
+                print(response_content)
+                conversation_history.append(response_message)
+                return response_content, conversation_history, sequence_level
+            elif identified_purpose == "interactive":
+                response_content, response_message = getattr(agents, identified_purpose)()
+                #TBD
+        elif sequence_level == "leave_message":
+            content_summary, message_summary = agents.create_message_summary()
+            return content_summary, message_summary, "confirm_summary"
+        elif sequence_level == "confirm_summary":
+            response_content = agents.confirm_summary()
+            if response_content == "nein":
+                response_content_formulate = \
+                    "Entschuldigung für das Missverständnis, können Sie bitte korrigieren, was ich falsch verstanden habe"
+                response_message = {"role": "assistant", "content": response_content_formulate}
+                conversation_history.append(response_message)
+                return response_content_formulate, conversation_history, "leave_message"
+            elif response_content == "update_message":
+                content_summary, message_summary = agents.create_message_summary()
+            else:
+                response_content_formulate = "In Ordnung, wir werden das Personal über Ihre Anfrage informieren"
+                response_message = {"role": "assistant", "content": response_content_formulate}
+                conversation_history.append(response_message)
+                return response_content_formulate, conversation_history, "main"
+
+
+
 
 
         #####################################################################################
@@ -439,6 +469,18 @@ class Agents:
             print(f"Error during LLM call for {function_name}: {e}")
             return {"error": str(e)}
 
+
+    def identify_purpose(self):
+        """
+        Determines the purpose of the user's request.
+
+        Returns:
+            str: The name of the determined purpose ('get_info', 'interactive', or 'small_talk').
+        """
+        response = self.call_llm("identify_purpose")
+        response_content = json.loads(response['choices'][0]['message']['content'])
+        return response_content.get("name")
+
     def get_info(self): # rename to get_info
         """
         Generate a response for the given user prompt using a locally defined model.
@@ -459,22 +501,31 @@ class Agents:
         print(response_content)
         return response_content.get("name")
 
-    def identify_purpose(self):
-        """
-        Determines the purpose of the user's request.
-
-        Returns:
-            str: The name of the determined purpose ('get_info', 'interactive', or 'small_talk').
-        """
-        response = self.call_llm("identify_purpose")
-        response_content = json.loads(response['choices'][0]['message']['content'])
-        return response_content.get("name")
-
     def small_talk(self):
         response = self.call_llm("small_talk")
         response_message = response['choices'][0]['message']
         response_content = response_message['content']
         return response_content, response_message
+
+    ############### please check if correct!!!!
+    def interactive(self):
+        response = self.call_llm("identify_interactive_purpose", use_history=True)
+        response_content = json.loads(response['choices'][0]['message']['content'])
+        int(response_content.get("name"))
+        if response_content.get("name") == "leave_message":
+            # tbd: ask the caller to leave a message and wait 3 seconds.
+        return response_content
+
+    def create_message_summary(self):
+        response = self.call_llm("create_message_summary")
+        response_message = response['choices'][0]['message']
+        response_content = response_message['content']
+        return response_content, response_message
+
+    def confirm_summary(self):
+        response = self.call_llm("confirm_summary")
+        response_content = json.loads(response['choices'][0]['message']['content'])
+        return response_content.get("name")
 
     def formulate_answer(self):
         response = self.call_llm("formulate_answer", use_history=True)

@@ -227,19 +227,6 @@ class Application:
             config_path (str, optional): Path to the configuration JSON file. Defaults to 'config.json'.
         """
         self.config = Config(config_path)
-        '''self.token_loader = TokenLoader(self.config.get('ionos_token_file'))
-        self.use_cloud = self.config.get('use_cloud', default=False)
-        llama_conf = self.config.get('llama_model')
-        self.llama = LlamaModel(
-            model_dir=llama_conf['directory'],
-            model_file=llama_conf['file'],
-            n_gpu_layers=llama_conf['n_gpu_layers'],
-            n_threads=llama_conf['n_threads'],
-            use_mlock=llama_conf['use_mlock'],
-            use_cloud=self.use_cloud
-        )
-        self.llama.ionos_token = self.token_loader.token if self.use_cloud else None'''
-
         whisper_conf = self.config.get('whisper_model')
         device = torch.device(whisper_conf['device'] if torch.cuda.is_available() else 'cpu')
         print(f"Using device: {device}\n")
@@ -256,9 +243,12 @@ class Application:
         self.initial_message = self.config.get('initial_message')
         print(f'Jan: {self.initial_message}')
         self.silence_threshold = audio_conf['silence_threshold_sec']
+        self.new_silence_threshold = audio_conf['new_silence_threshold_sec']
         self.play_initial_message()
         self.llm = LlamaModel()
         self.conversation_history = []
+        self.sequence_level = "main"
+        self.leave_message_memory = []
 
     def play_initial_message(self):
         """
@@ -342,10 +332,14 @@ class Application:
         buffer = b""
         silence_start = None
         is_processing = False
+        if self.sequence_level == "leave_message":
+            silence_threshold = self.new_silence_threshold
+        else:
+            silence_threshold = self.silence_threshold
 
         while True:
             if is_processing:
-                return buffer
+                return buffer, self.sequence_level
             audio_chunk = self.audio_handler.read_chunk()
             if not audio_chunk:
                 continue
@@ -356,18 +350,18 @@ class Application:
             else:
                 if silence_start is None:
                     silence_start = time.time()
-                elif time.time() - silence_start > self.silence_threshold:
+                elif time.time() - silence_start > silence_threshold:
                     is_processing = True
 
-    def process_audio_buffer(self, buffer, response_gen=None):
-        # Need to set a condition to add the LLM with the appointments as response_gen
-        # Appointments llm should be fully configured from LLM_Model
-        response_gen = response_gen or self.llm.generate_response
+    def process_audio_buffer(self, buffer):
+        response_gen = self.llm.generate_response
         self.audio_handler.stream.stop_stream()
         if buffer:
             transcribed_text = self.whisper.transcribe(buffer, self.audio_handler.rate)
             if transcribed_text:
-                llm_response, self.conversation_history = response_gen(transcribed_text, self.conversation_history)
+                llm_response, self.conversation_history, self.sequence_level = response_gen(transcribed_text,
+                                                                                            self.conversation_history,
+                                                                                            self.sequence_level)
                 audio_data = self.synthesizer.synthesize(llm_response)
                 if audio_data:
                     self.audio_handler.play_wave_bytes(audio_data)

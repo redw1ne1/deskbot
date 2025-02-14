@@ -32,7 +32,8 @@
     "channels": 1,
     "rate": 16000,
     "frame_duration_ms": 30,
-    "silence_threshold_sec": 1
+    "silence_threshold_sec": 1,
+    "new_silence_threshold_sec": 3
   },
 
   "use_cloud": false,
@@ -113,6 +114,40 @@
   },
   "formulate_answer": {
     "system_role": "Sie haben nur eine Aufgabe: Nutzen Sie den Gesprächsverlauf und den Input, um einen kurzen respektvollen Satz zu formulieren. Die Ihnen zur Verfügung stehenden Informationen strikt zu verwenden. NIEMALS Vermutungen anstellen"
+  },
+  "formulate_answer_confirm_summary": {
+    "system_role": "Sie haben nur eine Aufgabe: Nutzen Sie den Input, um einen kurzen respektvollen Satz zu formulieren.  Die Ihnen zur Verfügung stehenden Informationen strikt zu verwenden. NIEMALS Vermutungen anstellen"
+  },
+  "create_message_summary": {
+    "system_role": "Sie fassen die Nachricht zusammen. Sie beginnen immer so, als würde jemand wiederholen, was er verstanden hat, z.B., 'Wenn ich Sie richtig verstehe...' oder 'Ich verstehe, dass...', uzw., und Sie beenden immer mit bsw. 'Ist das richtig?' als Bestätigung. Die Ihnen zur Verfügung stehenden Informationen strikt zu verwenden. NIEMALS Vermutungen anstellen"
+  },
+  "confirm_summary": {
+    "system_role": "Sie analysieren die Antwort, ob sie positive oder negative ist.",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "ja",
+          "description": "bei einer positiven Antwort",
+          },
+          "strict": true
+        },
+      {
+        "type": "function",
+        "function": {
+          "name": "nein",
+          "description": "bei einer negativen Antwort, ohne weiter kommentare",
+          "strict": true
+        },
+        {
+        "type": "function",
+        "function": {
+          "name": "update_message",
+          "description": "bei einer negativen Antwort und wenn der Anrufer eine Korrektur oder einen Kommentar hinzufügt",
+          "strict": true
+        }
+      }
+      ]
   }
 }
 
