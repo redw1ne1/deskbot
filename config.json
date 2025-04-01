@@ -143,7 +143,7 @@
         "type": "function",
         "function": {
           "name": "update_message",
-          "description": "bei einer negativen Antwort und wenn der Anrufer eine Korrektur oder einen Kommentar hinzufügt",
+          "description": "bei einer negativen Antwort und wenn der Anrufer eine Korrektur hinzufügt",
           "strict": true
         }
       }
